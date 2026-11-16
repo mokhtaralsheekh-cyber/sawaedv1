@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="سواعد الغد">
+    <title>سواعد الغد - منظومة تسعير الحاويات والشحنات (PWA)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
+        input[type="number"] { direction: ltr; text-align: center; }
+        .tab-active { background: #f59e0b; color: #090d16; font-weight: 800; }
+        .tab-inactive { background: #1e293b; color: #cbd5e1; }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #ffffff !important; color: #000000 !important; padding: 0 !important; margin: 0 !important; }
+            #printQuoteSection { display: block !important; box-shadow: none !important; border: none !important; padding: 10px !important; margin: 0 !important; }
+            @page { size: A4 portrait; margin: 10mm; }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen pb-12">
+
+    <!-- الهيدر الرئيسي -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-xl no-print">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+                <div class="bg-amber-500 text-slate-950 font-black px-3 py-1.5 rounded-xl text-base sm:text-lg shadow">سواعد الغد</div>
+                <div>
+                    <h1 class="text-sm sm:text-base font-extrabold text-white leading-tight">منظومة تسعير الشحنات والحاويات</h1>
+                    <p class="text-[11px] text-slate-400">شركة سواعد الغد الحديثة للإطارات والنضائد</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button type="button" onclick="createNewShipment()" class="bg-amber-500 active:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs sm:text-sm shadow">＋ شحنة جديدة</button>
+                <button type="button" onclick="triggerAI()" class="bg-indigo-600 active:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs sm:text-sm shadow">🤖 قراءة فاتورة AI</button>
+                <input type="file" id="aiFile" accept="image/*" class="hidden" onchange="processAIFile(event)">
+                <button type="button" onclick="openModal('catalogModal')" class="bg-sky-700 active:bg-sky-600 text-white font-bold px-2.5 py-1.5 rounded-lg text-xs sm:text-sm">📚 القاعدة</button>
+                <button type="button" onclick="openModal('settingsModal')" class="bg-slate-800 border border-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs sm:text-sm">⚙️</button>
+                <button type="button" onclick="downloadBackup()" class="bg-emerald-700 active:bg-emerald-600 text-white px-2.5 py-1.5 rounded-lg text-xs sm:text-sm">💾</button>
+            </div>
+        </div>
+
+        <!-- شريط تبويبات الشحنات -->
+        <div id="tabsBar" class="max-w-7xl mx-auto px-3 sm:px-6 pb-2.5 flex gap-2 overflow-x-auto"></div>
+    </header>
+
+    <!-- تنبيه الذكاء الاصطناعي -->
+    <div id="aiBanner" class="hidden max-w-7xl mx-auto px-4 mt-3 no-print">
+        <div class="bg-indigo-950 border border-indigo-500 text-indigo-100 px-4 py-3 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2">
+            <span>⏳ جاري قراءة الفاتورة وتحليل المقاسات وسعة الحاويات عبر Gemini AI...</span>
+        </div>
+    </div>
+
+    <!-- جسم التطبيق -->
+    <main id="appBody" class="max-w-7xl mx-auto px-3 sm:px-6 pt-4 space-y-5"></main>
+
+    <!-- نافذة قاعدة البيانات (سعة 40HQ والأسعار) -->
+    <div id="catalogModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-3 z-50 no-print">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col p-4 sm:p-6 space-y-3">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                <h3 class="text-base sm:text-lg font-bold text-sky-400">📚 قاعدة بيانات المقاسات وسعة الحاوية (40HQ)</h3>
+                <button type="button" onclick="closeModal('catalogModal')" class="text-slate-400 text-2xl font-bold px-2">&times;</button>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs">
+                <input type="text" id="catDesc" placeholder="المقاس والنقشة والماركة" class="col-span-2 bg-slate-900 border border-slate-700 rounded p-2 text-white">
+                <input type="number" id="catCap" placeholder="سعة 40HQ (مثلاً 1100)" class="bg-slate-900 border border-slate-700 rounded p-2 text-amber-400 font-bold">
+                <input type="number" step="0.01" id="catFob" placeholder="سعر FOB ($)" class="bg-slate-900 border border-slate-700 rounded p-2 text-white">
+                <button type="button" onclick="saveToCatalog()" class="bg-sky-600 text-white font-bold rounded p-2">＋ إضافة للقاعدة</button>
+            </div>
+            <div class="overflow-y-auto flex-1 border border-slate-800 rounded-xl">
+                <table class="w-full text-right text-xs">
+                    <thead class="bg-slate-950 text-slate-300 sticky top-0">
+                        <tr>
+                            <th class="p-2">المقاس والنقشة والماركة</th>
+                            <th class="p-2 text-center">سعة 40HQ</th>
+                            <th class="p-2 text-center">FOB ($)</th>
+                            <th class="p-2 text-center">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody id="catalogList" class="divide-y divide-slate-800"></tbody>
+                </table>
+            </div>
+            <div class="flex justify-between items-center pt-2 border-t border-slate-800 text-xs">
+                <button type="button" onclick="resetCatalog()" class="text-rose-400 underline">استعادة قاعدة DEWOSTONE الأصلية</button>
+                <button type="button" onclick="closeModal('catalogModal')" class="bg-slate-800 px-4 py-2 rounded-lg font-bold">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة الإعدادات -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-3 z-50 no-print">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                <h3 class="text-base font-bold text-amber-400">⚙️ إعدادات المنظومة والنسخ الاحتياطي</h3>
+                <button type="button" onclick="closeModal('settingsModal')" class="text-slate-400 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-1.5">
+                <label class="block text-xs font-bold text-slate-300">مفتاح Gemini API Key (لقراءة صور الفواتير):</label>
+                <input type="password" id="geminiKeyInput" placeholder="AIzaSy..." dir="ltr" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white text-left">
+            </div>
+            <div class="space-y-1.5 border-t border-slate-800 pt-3">
+                <label class="block text-xs font-bold text-slate-300">استعادة نسخة احتياطية (JSON):</label>
+                <input type="file" accept=".json" onchange="uploadBackup(event)" class="w-full text-xs text-slate-400">
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button type="button" onclick="closeModal('settingsModal')" class="bg-slate-800 px-4 py-2 rounded-lg text-xs">إلغاء</button>
+                <button type="button" onclick="saveSettings()" class="bg-amber-500 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs">حفظ الإعدادات</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // البيانات الافتراضية المطابقة تماماً لملف الشحنة CLB07-V33-AK-P41539 (DEWOSTONE)
+        const INITIAL_ITEMS = [{"seq": 1, "desc": "175/70R13 82T WR079 DEWOSTONE", "qty": 100, "fob": 14.53, "cap40hq": 2000, "note": ""}, {"seq": 2, "desc": "185/65R14 86T WR079 DEWOSTONE", "qty": 140, "fob": 16.12, "cap40hq": 1700, "note": ""}, {"seq": 3, "desc": "185/70R14 88T WR079 DEWOSTONE", "qty": 140, "fob": 16.85, "cap40hq": 1700, "note": ""}, {"seq": 4, "desc": "195/65R15 91H C187 DEWOSTONE", "qty": 240, "fob": 18.88, "cap40hq": 1380, "note": ""}, {"seq": 5, "desc": "205/65R15 94H C187 DEWOSTONE", "qty": 200, "fob": 20.01, "cap40hq": 1300, "note": ""}, {"seq": 6, "desc": "205/60R16 92V C187 DEWOSTONE", "qty": 160, "fob": 20.76, "cap40hq": 1150, "note": ""}, {"seq": 7, "desc": "215/60R16 95H C187 DEWOSTONE", "qty": 800, "fob": 22.05, "cap40hq": 1100, "note": ""}, {"seq": 8, "desc": "205/70R15C 8PR 106/104R WR082 DEWOSTONE", "qty": 80, "fob": 25.97, "cap40hq": 1200, "note": ""}, {"seq": 9, "desc": "255/70R15C 8PR 113/110S WR682 DEWOSTONE", "qty": 40, "fob": 36.17, "cap40hq": 800, "note": ""}, {"seq": 10, "desc": "175/65R14 82H C187 DEWOSTONE", "qty": 100, "fob": 15.6, "cap40hq": 1750, "note": ""}, {"seq": 11, "desc": "175/70R14 84T C187 DEWOSTONE", "qty": 100, "fob": 15.72, "cap40hq": 1800, "note": ""}, {"seq": 12, "desc": "225/45ZR18 95W XL WR9096 DEWOSTONE", "qty": 40, "fob": 24.22, "cap40hq": 950, "note": ""}, {"seq": 13, "desc": "235/60R16 100H WR9096 DEWOSTONE", "qty": 60, "fob": 28.26, "cap40hq": 950, "note": ""}, {"seq": 14, "desc": "205/55R16 91V WR9096 DEWOSTONE", "qty": 160, "fob": 20.53, "cap40hq": 1060, "note": ""}, {"seq": 15, "desc": "215/45ZR17 91W XL WR9096 DEWOSTONE", "qty": 40, "fob": 22.28, "cap40hq": 1200, "note": ""}, {"seq": 16, "desc": "215/60R17 96H WR9086 DEWOSTONE", "qty": 40, "fob": 27.81, "cap40hq": 900, "note": ""}, {"seq": 17, "desc": "225/65R17 102H WR9086 DEWOSTONE", "qty": 40, "fob": 31.71, "cap40hq": 850, "note": ""}, {"seq": 18, "desc": "225/70R16 103H WR9086A DEWOSTONE", "qty": 40, "fob": 28.83, "cap40hq": 900, "note": "القائمة تسجّل النقش WR9086 بدل WR9086A"}, {"seq": 19, "desc": "225/55R17 97V WR9096 DEWOSTONE", "qty": 80, "fob": 29.34, "cap40hq": 900, "note": "القائمة تسجّله 225/55ZR17"}, {"seq": 20, "desc": "205/65R16 95H WR9096 DEWOSTONE", "qty": 160, "fob": 23.87, "cap40hq": 1100, "note": ""}, {"seq": 21, "desc": "215/65R16 98H WR9096 DEWOSTONE", "qty": 200, "fob": 25.6, "cap40hq": 1000, "note": ""}, {"seq": 22, "desc": "235/65R17 104H WR9086 DEWOSTONE", "qty": 40, "fob": 32.22, "cap40hq": 830, "note": ""}, {"seq": 23, "desc": "235/70R16 106H WR9086 DEWOSTONE", "qty": 20, "fob": 33.24, "cap40hq": 800, "note": ""}, {"seq": 24, "desc": "265/65R17 112S WR682 DEWOSTONE", "qty": 20, "fob": 41.37, "cap40hq": 690, "note": ""}, {"seq": 25, "desc": "195R14C 8PR 106/104Q WR091 DEWOSTONE", "qty": 120, "fob": 25.53, "cap40hq": 1250, "note": ""}, {"seq": 26, "desc": "195R15C 8PR WR091 DEWOSTONE", "qty": 120, "fob": 27.32, "cap40hq": 1200, "note": ""}, {"seq": 27, "desc": "185R14C 8PR 102/100Q WR091 DEWOSTONE", "qty": 100, "fob": 23.28, "cap40hq": 1350, "note": ""}, {"seq": 28, "desc": "215/50ZR17 95W XL WR9096 DEWOSTONE", "qty": 40, "fob": 23.99, "cap40hq": 1000, "note": ""}, {"seq": 29, "desc": "225/60R16 98H WR9096 DEWOSTONE", "qty": 100, "fob": 25.6, "cap40hq": 1000, "note": "يوجد نفس المقاس بنقش C187 بسعر 25.37"}, {"seq": 30, "desc": "225/50ZR17 98W XL WR9096 DEWOSTONE", "qty": 20, "fob": 25.95, "cap40hq": 960, "note": ""}, {"seq": 31, "desc": "195/75R16C 8PR 107/105R WR921 DEWOSTONE", "qty": 20, "fob": 29.11, "cap40hq": 1050, "note": ""}, {"seq": 32, "desc": "165/70R13 79T WR079 DEWOSTONE", "qty": 100, "fob": 13.88, "cap40hq": 2100, "note": ""}, {"seq": 33, "desc": "195/55R16 91V XL WR9096 DEWOSTONE", "qty": 100, "fob": 20.83, "cap40hq": 1300, "note": ""}, {"seq": 34, "desc": "245/45ZR18 100W XL WR9096 DEWOSTONE", "qty": 40, "fob": 28.6, "cap40hq": 850, "note": ""}, {"seq": 35, "desc": "195/70R15C 8PR 104/102R WR082 DEWOSTONE", "qty": 100, "fob": 25.08, "cap40hq": 1250, "note": ""}, {"seq": 36, "desc": "215/70R15C 8PR 109/107R WR082 DEWOSTONE", "qty": 150, "fob": 29.28, "cap40hq": 1100, "note": ""}, {"seq": 37, "desc": "215/55ZR17 94W WR9096 DEWOSTONE", "qty": 120, "fob": 23.99, "cap40hq": 1050, "note": ""}, {"seq": 38, "desc": "265/70R16 112T WR682 DEWOSTONE", "qty": 20, "fob": 40.36, "cap40hq": 660, "note": "القائمة تسجّله 112S بدل 112T"}, {"seq": 39, "desc": "215/65R15 96H WR080 DEWOSTONE", "qty": 150, "fob": 22.28, "cap40hq": 1200, "note": ""}, {"seq": 40, "desc": "235/55ZR17 103W XL WR198 DEWOSTONE", "qty": 80, "fob": 29.98, "cap40hq": 880, "note": ""}, {"seq": 41, "desc": "185/60R15 84H WR080 DEWOSTONE", "qty": 40, "fob": 17.47, "cap40hq": 1650, "note": ""}, {"seq": 42, "desc": "5.00R12C 10PR 88/86Q WR081 DEWOSTONE", "qty": 200, "fob": 14.47, "cap40hq": 2300, "note": ""}, {"seq": 43, "desc": "225/70R17 108T XL WR682 DEWOSTONE", "qty": 200, "fob": 32.95, "cap40hq": 860, "note": ""}, {"seq": 44, "desc": "225/40ZR18 92W XL WR198 DEWOSTONE", "qty": 20, "fob": 25.25, "cap40hq": 960, "note": ""}, {"seq": 45, "desc": "185/55R15 82H C187 DEWOSTONE", "qty": 40, "fob": 16.8, "cap40hq": 1500, "note": ""}, {"seq": 46, "desc": "185R15C 8PR 103/102S WR082 DEWOSTONE", "qty": 100, "fob": 24.79, "cap40hq": 1280, "note": ""}, {"seq": 47, "desc": "175/50R15 75H C187 DEWOSTONE", "qty": 40, "fob": 15.68, "cap40hq": 1600, "note": ""}, {"seq": 48, "desc": "155/70R13 75T WR080 DEWOSTONE", "qty": 40, "fob": 14.37, "cap40hq": 2300, "note": ""}];
+
+        const DEFAULT_CATALOG = INITIAL_ITEMS.map(x => ({
+            desc: x.desc,
+            cap40hq: x.cap40hq,
+            fob: x.fob
+        }));
+
+        const STORAGE_KEY = "sawaed_clb07_pwa_v1";
+
+        let state = {
+            apiKey: "",
+            activeShipmentId: "ship_clb07",
+            catalog: JSON.parse(JSON.stringify(DEFAULT_CATALOG)),
+            shipments: [
+                {
+                    id: "ship_clb07",
+                    title: "CLB07-V33-AK-P41539 (DEWOSTONE)",
+                    exchangeRate: 10.25,
+                    profitMargin: 10,
+                    containersCount: 4,
+                    seaFreightUSD: 0,
+                    loadingFeesUSD: 0,
+                    customsLYD: 0,
+                    localTransportLYD: 0,
+                    unloadingTotalLYD: 0,
+                    pressingTotalLYD: 0,
+                    searchFilter: "",
+                    items: JSON.parse(JSON.stringify(INITIAL_ITEMS))
+                }
+            ]
+        };
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && Array.isArray(parsed.shipments) && parsed.shipments.length > 0) {
+                        state = parsed;
+                    }
+                }
+            } catch (e) {
+                console.error("Storage load error:", e);
+            }
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.error("Storage save error:", e);
+            }
+        }
+
+        function getActiveShipment() {
+            return state.shipments.find(s => s.id === state.activeShipmentId) || state.shipments[0];
+        }
+
+        // محرك الحسابات المطابق 100% لمعادلات ملف الإكسل CLB07-P41539
+        function computeMetrics(s) {
+            const rate = Number(s.exchangeRate) || 0;
+            const marginPct = (Number(s.profitMargin) || 0) / 100;
+            const cCount = Number(s.containersCount) || 0;
+            const seaUSD = Number(s.seaFreightUSD) || 0;
+            const loadUSD = Number(s.loadingFeesUSD) || 0;
+            const custLYD = Number(s.customsLYD) || 0;
+            const transLYD = Number(s.localTransportLYD) || 0;
+            const unloadLYD = Number(s.unloadingTotalLYD) || 0;
+            const pressLYD = Number(s.pressingTotalLYD) || 0;
+
+            let totalPieces = 0;
+            let totalFobUSD = 0;
+            let totalEquivContainers = 0;
+
+            s.items.forEach(item => {
+                const q = Number(item.qty) || 0;
+                const f = Number(item.fob) || 0;
+                const cap = Number(item.cap40hq) || 1;
+                totalPieces += q;
+                totalFobUSD += q * f;
+                totalEquivContainers += (cap > 0 ? q / cap : 0);
+            });
+
+            // معادلة F7 في الإكسل: إجمالي التكاليف التشغيلية (د.ل)
+            // =(((B7+B8)*B6*B4)+(B9*B6)+(B10*B6)+B11+B12)
+            const totalOperatingLYD = ((seaUSD + loadUSD) * cCount * rate) + (custLYD * cCount) + (transLYD * cCount) + unloadLYD + pressLYD;
+
+            // معادلة F8 في الإكسل: مصاريف الحاوية الواحدة المكافئة (د.ل / حاوية)
+            const costPerContainerLYD = totalEquivContainers > 0 ? (totalOperatingLYD / totalEquivContainers) : 0;
+
+            let totalLandedLYD = 0;
+            let totalSellingLYD = 0;
+
+            const rows = s.items.map((item, idx) => {
+                const q = Number(item.qty) || 0;
+                const f = Number(item.fob) || 0;
+                const cap = Number(item.cap40hq) || 1;
+
+                const rowFobUSD = q * f;
+                const containerShare = cap > 0 ? (q / cap) : 0; // نسبة شغل الحاوية
+                const pieceExpenseLYD = cap > 0 ? (1 / cap) * costPerContainerLYD : 0; // مصاريف القطعة (د.ل)
+                const landedUnitLYD = (f * rate) + pieceExpenseLYD; // التكلفة الواصلة (د.ل)
+                const sellingUnitLYD = landedUnitLYD * (1 + marginPct); // سعر البيع (د.ل)
+                const profitUnitLYD = sellingUnitLYD - landedUnitLYD; // الربح/قطعة (د.ل)
+
+                totalLandedLYD += landedUnitLYD * q;
+                totalSellingLYD += sellingUnitLYD * q;
+
+                return {
+                    ...item,
+                    idx,
+                    rowFobUSD,
+                    containerShare,
+                    pieceExpenseLYD,
+                    landedUnitLYD,
+                    sellingUnitLYD,
+                    profitUnitLYD,
+                    rowSellingLYD: sellingUnitLYD * q
+                };
+            });
+
+            return {
+                totalPieces,
+                totalFobUSD,
+                totalEquivContainers,
+                totalOperatingLYD,
+                costPerContainerLYD,
+                totalLandedLYD,
+                totalSellingLYD,
+                totalProfitLYD: totalSellingLYD - totalLandedLYD,
+                rows
+            };
+        }
+
+        function renderTabs() {
+            const bar = document.getElementById("tabsBar");
+            if (!bar) return;
+            bar.innerHTML = state.shipments.map(s => `
+                <button type="button" onclick="selectShipment('${s.id}')"
+                    class="px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition ${s.id === state.activeShipmentId ? 'tab-active shadow' : 'tab-inactive'}">
+                    📦 ${s.title}
+                </button>
+            `).join('');
+        }
+
+        function renderApp() {
+            renderTabs();
+            const s = getActiveShipment();
+            const m = computeMetrics(s);
+            const body = document.getElementById("appBody");
+            if (!body) return;
+
+            const filterTxt = (s.searchFilter || "").trim().toLowerCase();
+            const filteredRows = filterTxt
+                ? m.rows.filter(r => r.desc.toLowerCase().includes(filterTxt) || (r.note && r.note.toLowerCase().includes(filterTxt)))
+                : m.rows;
+
+            body.innerHTML = `
+                <!-- 1. بطاقة عنوان الشحنة وأزرار التصدير -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg no-print flex flex-wrap justify-between items-center gap-3">
+                    <div class="flex-1 min-w-[220px]">
+                        <label class="block text-[11px] text-slate-400 mb-1">اسم / رقم الشحنة:</label>
+                        <input type="text" value="${escapeHtml(s.title)}" onchange="updateField('title', this.value)"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm sm:text-base font-extrabold text-amber-400 outline-none">
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="window.print()" class="bg-emerald-600 active:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow">🖨️ طباعة / PDF للزبائن</button>
+                        <button type="button" onclick="sendWhatsApp()" class="bg-green-600 active:bg-green-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow">💬 إرسال واتساب</button>
+                        <button type="button" onclick="removeShipment()" class="bg-rose-950 border border-rose-800 text-rose-300 px-3 py-2 rounded-xl text-xs">حذف</button>
+                    </div>
+                </div>
+
+                <!-- 2. لوحة تحكم مدخلات الحاويات والمصاريف + إحصائيات الحاويات -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 no-print">
+                    <!-- المدخلات (الخلايا الصفراء في الإكسل) -->
+                    <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                            <h2 class="text-sm font-extrabold text-amber-400">🎛️ لوحة تحكم مدخلات الحاويات والمصاريف</h2>
+                            <span class="text-[11px] text-slate-400">تحديث فوري للحسابات</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-amber-500/30">
+                                <label class="block text-slate-400 mb-1">سعر الصرف ($/د.ل)</label>
+                                <input type="number" step="0.01" value="${s.exchangeRate}" onchange="updateNum('exchangeRate', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm font-black text-amber-400">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-emerald-500/30">
+                                <label class="block text-slate-400 mb-1">هامش الربح (%)</label>
+                                <input type="number" step="0.5" value="${s.profitMargin}" onchange="updateNum('profitMargin', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm font-black text-emerald-400">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                <label class="block text-slate-400 mb-1">عدد الحاويات</label>
+                                <input type="number" step="1" value="${s.containersCount}" onchange="updateNum('containersCount', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm font-bold text-white">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                <label class="block text-slate-400 mb-1">شحن بحري للحاوية ($)</label>
+                                <input type="number" step="10" value="${s.seaFreightUSD}" onchange="updateNum('seaFreightUSD', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm text-white">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                <label class="block text-slate-400 mb-1">رسوم تحميل إضافية ($)</label>
+                                <input type="number" step="10" value="${s.loadingFeesUSD}" onchange="updateNum('loadingFeesUSD', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm text-white">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                <label class="block text-slate-400 mb-1">جمرك الحاوية (د.ل)</label>
+                                <input type="number" step="100" value="${s.customsLYD}" onchange="updateNum('customsLYD', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm text-white">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                <label class="block text-slate-400 mb-1">نقل داخلي للحاوية (د.ل)</label>
+                                <input type="number" step="100" value="${s.localTransportLYD}" onchange="updateNum('localTransportLYD', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm text-white">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                <label class="block text-slate-400 mb-1">عمال تنزيل الشحنة (د.ل)</label>
+                                <input type="number" step="50" value="${s.unloadingTotalLYD}" onchange="updateNum('unloadingTotalLYD', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm text-white">
+                            </div>
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                <label class="block text-slate-400 mb-1">مصاريف ضغط الإطارات (د.ل)</label>
+                                <input type="number" step="50" value="${s.pressingTotalLYD}" onchange="updateNum('pressingTotalLYD', this.value)"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-sm text-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- الإحصائيات الكلية -->
+                    <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between space-y-3">
+                        <div class="border-b border-slate-800 pb-2">
+                            <h2 class="text-sm font-extrabold text-sky-400">📊 إحصائيات ومعاملات الحاويات الكلية</h2>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2.5 text-xs">
+                            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                <div class="text-slate-400">إجمالي القطع (إطارات)</div>
+                                <div class="text-lg font-black text-white mt-0.5">${m.totalPieces.toLocaleString()} <span class="text-[11px] font-normal text-slate-400">قطعة</span></div>
+                            </div>
+                            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                <div class="text-slate-400">إجمالي قيمة البضاعة FOB</div>
+                                <div class="text-lg font-black text-sky-400 mt-0.5">$${m.totalFobUSD.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                            </div>
+                            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                <div class="text-slate-400">الحاويات المكافئة (40HQ)</div>
+                                <div class="text-lg font-black text-amber-400 mt-0.5">${m.totalEquivContainers.toFixed(4)} <span class="text-[11px] font-normal text-slate-400">حاوية</span></div>
+                            </div>
+                            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                <div class="text-slate-400">التكاليف التشغيلية الكلية</div>
+                                <div class="text-lg font-black text-rose-400 mt-0.5">${m.totalOperatingLYD.toLocaleString('en-US', {maximumFractionDigits: 2})} <span class="text-[11px] font-normal text-slate-400">د.ل</span></div>
+                            </div>
+                            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                <div class="text-slate-400">مصاريف الحاوية الواحدة</div>
+                                <div class="text-base font-extrabold text-slate-200 mt-0.5">${m.costPerContainerLYD.toLocaleString('en-US', {maximumFractionDigits: 2})} <span class="text-[11px] font-normal text-slate-400">د.ل</span></div>
+                            </div>
+                            <div class="bg-slate-950 p-3 rounded-xl border border-emerald-500/30">
+                                <div class="text-slate-400">صافي الربح المتوقع</div>
+                                <div class="text-base font-black text-emerald-400 mt-0.5">${m.totalProfitLYD.toLocaleString('en-US', {maximumFractionDigits: 2})} <span class="text-[11px] font-normal text-slate-400">د.ل</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. شريط البحث وإضافة الأصناف -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow no-print flex flex-wrap items-center gap-2">
+                    <input type="text" placeholder="🔍 ابحث بالمقاس أو النقشة (مثل 215/60R16 أو WR079)..." value="${escapeHtml(s.searchFilter || '')}"
+                        oninput="updateSearch(this.value)"
+                        class="flex-1 min-w-[200px] bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white outline-none">
+                    <select id="quickCatalogSelect" class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 max-w-xs">
+                        ${state.catalog.map((c, i) => `<option value="${i}">${c.desc} (سعة: ${c.cap40hq})</option>`).join('')}
+                    </select>
+                    <button type="button" onclick="addFromCatalog()" class="bg-amber-500 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs">＋ من القاعدة</button>
+                    <button type="button" onclick="addBlankRow()" class="bg-slate-800 border border-slate-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs">＋ سطر فارغ</button>
+                </div>
+
+                <!-- 4. جدول الأصناف التفصيلي -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden no-print">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right border-collapse text-xs">
+                            <thead>
+                                <tr class="bg-slate-950 text-slate-300 border-b border-slate-800">
+                                    <th class="p-2.5 text-center">ت</th>
+                                    <th class="p-2.5 min-w-[220px]">المقاس والنقشة والماركة</th>
+                                    <th class="p-2.5 text-center">الكمية</th>
+                                    <th class="p-2.5 text-center">FOB ($)</th>
+                                    <th class="p-2.5 text-center">الإجمالي ($)</th>
+                                    <th class="p-2.5 text-center text-sky-400">سعة 40HQ</th>
+                                    <th class="p-2.5 text-center">شغل الحاوية</th>
+                                    <th class="p-2.5 text-center">مصاريف/قطعة</th>
+                                    <th class="p-2.5 text-center text-amber-400">التكلفة الواصلة (د.ل)</th>
+                                    <th class="p-2.5 text-center text-emerald-400">سعر البيع (د.ل)</th>
+                                    <th class="p-2.5 text-center">الربح/قطعة</th>
+                                    <th class="p-2.5 text-center">حذف</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                                ${filteredRows.map(r => `
+                                    <tr class="hover:bg-slate-800/60 transition">
+                                        <td class="p-2 text-center text-slate-400 font-bold">${r.idx + 1}</td>
+                                        <td class="p-2">
+                                            <input type="text" value="${escapeHtml(r.desc)}" onchange="updateRow(${r.idx}, 'desc', this.value)"
+                                                class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white font-bold">
+                                            ${r.note ? `<div class="text-[10px] text-amber-400/90 mt-0.5">⚠️ ${escapeHtml(r.note)}</div>` : ''}
+                                        </td>
+                                        <td class="p-2">
+                                            <input type="number" value="${r.qty}" onchange="updateRow(${r.idx}, 'qty', this.value)"
+                                                class="w-16 bg-slate-950 border border-slate-800 rounded p-1 font-bold text-white">
+                                        </td>
+                                        <td class="p-2">
+                                            <input type="number" step="0.01" value="${r.fob}" onchange="updateRow(${r.idx}, 'fob', this.value)"
+                                                class="w-20 bg-slate-950 border border-slate-800 rounded p-1 text-slate-200">
+                                        </td>
+                                        <td class="p-2 text-center text-slate-300 font-semibold">${r.rowFobUSD.toFixed(2)}</td>
+                                        <td class="p-2">
+                                            <input type="number" value="${r.cap40hq}" onchange="updateRow(${r.idx}, 'cap40hq', this.value)"
+                                                class="w-16 bg-slate-950 border border-sky-900/60 rounded p-1 text-sky-400 font-bold">
+                                        </td>
+                                        <td class="p-2 text-center text-slate-400">${(r.containerShare * 100).toFixed(2)}%</td>
+                                        <td class="p-2 text-center text-slate-300">${r.pieceExpenseLYD.toFixed(2)}</td>
+                                        <td class="p-2 text-center font-extrabold text-amber-400">${r.landedUnitLYD.toFixed(2)}</td>
+                                        <td class="p-2 text-center font-black text-emerald-400 text-sm">${r.sellingUnitLYD.toFixed(2)}</td>
+                                        <td class="p-2 text-center text-emerald-300">${r.profitUnitLYD.toFixed(2)}</td>
+                                        <td class="p-2 text-center">
+                                            <button type="button" onclick="deleteRow(${r.idx})" class="text-rose-400 bg-rose-950/50 px-2 py-1 rounded font-bold">✕</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                            <tfoot class="bg-slate-950 font-extrabold text-slate-200 border-t-2 border-slate-700">
+                                <tr>
+                                    <td colspan="2" class="p-3">المجموع الإجمالي للشحنة</td>
+                                    <td class="p-3 text-center text-white">${m.totalPieces.toLocaleString()}</td>
+                                    <td class="p-3 text-center">—</td>
+                                    <td class="p-3 text-center text-sky-400">$${m.totalFobUSD.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                    <td class="p-3 text-center">—</td>
+                                    <td class="p-3 text-center text-amber-400">${m.totalEquivContainers.toFixed(3)} حاوية</td>
+                                    <td class="p-3 text-center">—</td>
+                                    <td class="p-3 text-center text-amber-400">${m.totalLandedLYD.toLocaleString('en-US', {maximumFractionDigits: 0})} د.ل</td>
+                                    <td class="p-3 text-center text-emerald-400">${m.totalSellingLYD.toLocaleString('en-US', {maximumFractionDigits: 0})} د.ل</td>
+                                    <td class="p-3 text-center text-emerald-300">${m.totalProfitLYD.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 5. عرض الأسعار النظيف للزبائن (يظهر عند الطباعة / PDF بدون تكاليف أو أرباح) -->
+                <div id="printQuoteSection" class="hidden bg-white text-black p-6 rounded-xl">
+                    <div class="flex justify-between items-start border-b-2 border-black pb-3 mb-4">
+                        <div>
+                            <h1 class="text-xl font-black">شركة سواعد الغد الحديثة للإطارات والنضائد</h1>
+                            <p class="text-xs mt-1">تاجوراء البيفي - شارع الأمم المتحدة | طرابلس - سبها</p>
+                            <p class="text-xs font-bold mt-0.5">هواتف: 0914340100 - 0914340200</p>
+                        </div>
+                        <div class="text-left">
+                            <h2 class="text-lg font-extrabold">عرض أسعار جملة (Quotation)</h2>
+                            <p class="text-xs">المرجع: ${escapeHtml(s.title)}</p>
+                            <p class="text-xs">التاريخ: ${new Date().toLocaleDateString('ar-LY')}</p>
+                        </div>
+                    </div>
+
+                    <table class="w-full text-right border-collapse border border-gray-400 text-xs">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="border border-gray-400 p-1.5 text-center w-8">ت</th>
+                                <th class="border border-gray-400 p-1.5">المقاس والنقشة والماركة</th>
+                                <th class="border border-gray-400 p-1.5 text-center w-28">سعر البيع (د.ل)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${m.rows.map((r, i) => `
+                                <tr>
+                                    <td class="border border-gray-400 p-1 text-center">${i + 1}</td>
+                                    <td class="border border-gray-400 p-1 font-bold">${escapeHtml(r.desc)}</td>
+                                    <td class="border border-gray-400 p-1 text-center font-extrabold">${r.sellingUnitLYD.toFixed(2)} د.ل</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="mt-4 pt-2 border-t border-gray-300 flex justify-between text-[11px]">
+                        <span>* الأسعار بالدينار الليبي وقابلة للتغيير دون إشعار مسبق.</span>
+                        <span class="font-bold">إدارة المبيعات - شركة سواعد الغد الحديثة</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function escapeHtml(str) {
+            return String(str || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
+        function selectShipment(id) {
+            state.activeShipmentId = id;
+            saveState();
+            renderApp();
+        }
+
+        function createNewShipment() {
+            const id = "ship_" + Date.now();
+            state.shipments.push({
+                id,
+                title: "شحنة جديدة #" + (state.shipments.length + 1),
+                exchangeRate: getActiveShipment().exchangeRate || 10.25,
+                profitMargin: 10,
+                containersCount: 1,
+                seaFreightUSD: 0,
+                loadingFeesUSD: 0,
+                customsLYD: 0,
+                localTransportLYD: 0,
+                unloadingTotalLYD: 0,
+                pressingTotalLYD: 0,
+                searchFilter: "",
+                items: [
+                    { seq: 1, desc: "195/65R15 91H C187 DEWOSTONE", qty: 100, fob: 18.88, cap40hq: 1380, note: "" }
+                ]
+            });
+            state.activeShipmentId = id;
+            saveState();
+            renderApp();
+        }
+
+        function removeShipment() {
+            if (state.shipments.length <= 1) {
+                alert("لا يمكن حذف الشحنة الوحيدة.");
+                return;
+            }
+            if (confirm("هل أنت متأكد من حذف هذه الشحنة؟")) {
+                state.shipments = state.shipments.filter(s => s.id !== state.activeShipmentId);
+                state.activeShipmentId = state.shipments[0].id;
+                saveState();
+                renderApp();
+            }
+        }
+
+        function updateField(key, val) {
+            getActiveShipment()[key] = val;
+            saveState();
+            renderTabs();
+        }
+
+        function updateNum(key, val) {
+            getActiveShipment()[key] = Number(val) || 0;
+            saveState();
+            renderApp();
+        }
+
+        function updateSearch(val) {
+            getActiveShipment().searchFilter = val;
+            renderApp();
+        }
+
+        function updateRow(idx, key, val) {
+            const item = getActiveShipment().items[idx];
+            if (!item) return;
+            if (key === "desc" || key === "note") {
+                item[key] = val;
+            } else {
+                item[key] = Number(val) || 0;
+            }
+            saveState();
+            renderApp();
+        }
+
+        function deleteRow(idx) {
+            getActiveShipment().items.splice(idx, 1);
+            saveState();
+            renderApp();
+        }
+
+        function addBlankRow() {
+            const s = getActiveShipment();
+            s.items.push({ seq: s.items.length + 1, desc: "مقاس جديد DEWOSTONE", qty: 40, fob: 20.0, cap40hq: 1000, note: "" });
+            saveState();
+            renderApp();
+        }
+
+        function addFromCatalog() {
+            const sel = document.getElementById("quickCatalogSelect");
+            if (!sel) return;
+            const c = state.catalog[Number(sel.value)];
+            if (!c) return;
+            const s = getActiveShipment();
+            s.items.push({ seq: s.items.length + 1, desc: c.desc, qty: 40, fob: c.fob, cap40hq: c.cap40hq, note: "" });
+            saveState();
+            renderApp();
+        }
+
+        function sendWhatsApp() {
+            const s = getActiveShipment();
+            const m = computeMetrics(s);
+            let msg = `*شركة سواعد الغد الحديثة للإطارات والنضائد*\nعرض أسعار: ${s.title}\n\n`;
+            m.rows.forEach((r, i) => {
+                msg += `${i + 1}. ${r.desc} ⬅️ *${r.sellingUnitLYD.toFixed(2)} د.ل*\n`;
+            });
+            msg += `\n📞 0914340100 - 0914340200\n*الأسعار قابلة للتغيير دون إشعار مسبق.`;
+            window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+        }
+
+        function openModal(id) {
+            if (id === "catalogModal") renderCatalog();
+            if (id === "settingsModal") document.getElementById("geminiKeyInput").value = state.apiKey || "";
+            const el = document.getElementById(id);
+            el.classList.remove("hidden");
+            el.classList.add("flex");
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            el.classList.add("hidden");
+            el.classList.remove("flex");
+        }
+
+        function renderCatalog() {
+            const tbody = document.getElementById("catalogList");
+            if (!tbody) return;
+            tbody.innerHTML = state.catalog.map((c, i) => `
+                <tr>
+                    <td class="p-2 font-bold text-white">${escapeHtml(c.desc)}</td>
+                    <td class="p-2 text-center text-amber-400 font-bold">${c.cap40hq}</td>
+                    <td class="p-2 text-center">$${c.fob}</td>
+                    <td class="p-2 text-center"><button type="button" onclick="deleteCat(${i})" class="text-rose-400 font-bold">✕</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function saveToCatalog() {
+            const desc = document.getElementById("catDesc").value.trim();
+            const cap = Number(document.getElementById("catCap").value) || 1000;
+            const fob = Number(document.getElementById("catFob").value) || 20;
+            if (!desc) { alert("أدخل المقاس والماركة."); return; }
+            state.catalog.unshift({ desc, cap40hq: cap, fob });
+            saveState();
+            renderCatalog();
+            renderApp();
+            document.getElementById("catDesc").value = "";
+        }
+
+        function deleteCat(i) {
+            state.catalog.splice(i, 1);
+            saveState();
+            renderCatalog();
+            renderApp();
+        }
+
+        function resetCatalog() {
+            if (confirm("استعادة قاعدة DEWOSTONE الأصلية؟")) {
+                state.catalog = JSON.parse(JSON.stringify(DEFAULT_CATALOG));
+                saveState();
+                renderCatalog();
+                renderApp();
+            }
+        }
+
+        function saveSettings() {
+            state.apiKey = document.getElementById("geminiKeyInput").value.trim();
+            saveState();
+            closeModal("settingsModal");
+            alert("تم حفظ الإعدادات.");
+        }
+
+        function downloadBackup() {
+            const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "sawaed_clb07_backup_" + Date.now() + ".json";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function uploadBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed && Array.isArray(parsed.shipments)) {
+                        state = parsed;
+                        saveState();
+                        renderApp();
+                        closeModal("settingsModal");
+                        alert("تمت استعادة النسخة الاحتياطية بنجاح!");
+                    }
+                } catch (err) {
+                    alert("ملف النسخة الاحتياطية غير صالح.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function triggerAI() {
+            if (!state.apiKey) {
+                const k = prompt("أدخل مفتاح Gemini API Key لقراءة الفاتورة:");
+                if (!k || !k.trim()) return;
+                state.apiKey = k.trim();
+                saveState();
+            }
+            const inp = document.getElementById("aiFile");
+            inp.value = "";
+            inp.click();
+        }
+
+        async function processAIFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const banner = document.getElementById("aiBanner");
+            banner.classList.remove("hidden");
+            try {
+                const base64 = await new Promise((res, rej) => {
+                    const r = new FileReader();
+                    r.onload = () => res(r.result.split(",")[1]);
+                    r.onerror = rej;
+                    r.readAsDataURL(file);
+                });
+                const prompt = `Extract tire or battery invoice lines into a strict JSON array. Each object must have:
+- "desc": string (full size, pattern, brand, e.g. "195/65R15 91H C187 DEWOSTONE")
+- "qty": number
+- "fob": number (unit FOB price in USD)
+- "cap40hq": number (estimated 40HQ container loading capacity in pieces, e.g., 1380 for 195/65R15, 2000 for 175/70R13, 660 for 265/70R16)
+Return ONLY raw JSON array.`;
+
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: prompt },
+                                { inline_data: { mime_type: file.type || "image/jpeg", data: base64 } }
+                            ]
+                        }]
+                    })
+                });
+                const json = await resp.json();
+                if (json.error) throw new Error(json.error.message);
+                const rawTxt = json.candidates[0].content.parts[0].text.replace(/```json/gi, "").replace(/```/g, "").trim();
+                const extracted = JSON.parse(rawTxt);
+
+                const newId = "ship_" + Date.now();
+                state.shipments.push({
+                    id: newId,
+                    title: "فاتورة AI (" + new Date().toLocaleDateString("ar-LY") + ")",
+                    exchangeRate: getActiveShipment().exchangeRate || 10.25,
+                    profitMargin: 10,
+                    containersCount: 1,
+                    seaFreightUSD: 0,
+                    loadingFeesUSD: 0,
+                    customsLYD: 0,
+                    localTransportLYD: 0,
+                    unloadingTotalLYD: 0,
+                    pressingTotalLYD: 0,
+                    searchFilter: "",
+                    items: extracted.map((x, idx) => ({
+                        seq: idx + 1,
+                        desc: x.desc || "صنف مستخرج",
+                        qty: Number(x.qty) || 40,
+                        fob: Number(x.fob) || 20,
+                        cap40hq: Number(x.cap40hq) || 1000,
+                        note: ""
+                    }))
+                });
+                state.activeShipmentId = newId;
+                saveState();
+                renderApp();
+                alert("✅ تم استخراج " + extracted.length + " صنف وإنشاء شحنة جديدة بنجاح!");
+            } catch (err) {
+                alert("❌ خطأ في قراءة الفاتورة: " + err.message);
+            } finally {
+                banner.classList.add("hidden");
+            }
+        }
+
+        // دعم PWA Manifest الديناميكي
+        try {
+            const manifest = {
+                name: "سواعد الغد - تسعير الحاويات والشحنات",
+                short_name: "سواعد الغد",
+                start_url: "./sawaed_clb07.html",
+                display: "standalone",
+                background_color: "#090d16",
+                theme_color: "#f59e0b",
+                icons: [{
+                    src: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23f59e0b'/><text x='50' y='64' font-size='44' font-family='sans-serif' font-weight='bold' text-anchor='middle' fill='%23090d16'>SG</text></svg>",
+                    sizes: "192x192",
+                    type: "image/svg+xml"
+                }]
+            };
+            const mLink = document.createElement("link");
+            mLink.rel = "manifest";
+            mLink.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: "application/json" }));
+            document.head.appendChild(mLink);
+        } catch (e) {}
+
+        // تشغيل فوري
+        loadState();
+        renderApp();
+    </script>
+</body>
+</html>
